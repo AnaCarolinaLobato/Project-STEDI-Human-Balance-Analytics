@@ -43,7 +43,18 @@ PrivacyJoin_node1702886701554 = Join.apply(
 # Script generated for node Drop Fields
 DropFields_node1702886774518 = DropFields.apply(
     frame=PrivacyJoin_node1702886701554,
-    paths=["email", "phone"],
+    paths=[
+        "serialnumber",
+        "birthday",
+        "registrationdate",
+        "sharewithresearchasofdate",
+        "customername",
+        "sharewithfriendsasofdate",
+        "email",
+        "lastupdatedate",
+        "phone",
+        "sharewithpublicasofdate",
+    ],
     transformation_ctx="DropFields_node1702886774518",
 )
 
