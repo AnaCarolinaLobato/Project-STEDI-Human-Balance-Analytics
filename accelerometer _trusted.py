@@ -38,7 +38,18 @@ customerprivacyjoin_node1703061569715 = Join.apply(
 # Script generated for node Drop Fields
 DropFields_node1703061893643 = DropFields.apply(
     frame=customerprivacyjoin_node1703061569715,
-    paths=["email", "phone"],
+    paths=[
+        "serialNumber",
+        "birthDay",
+        "shareWithPublicAsOfDate",
+        "shareWithResearchAsOfDate",
+        "registrationDate",
+        "customerName",
+        "shareWithFriendsAsOfDate",
+        "email",
+        "phone",
+        "lastUpdateDate",
+    ],
     transformation_ctx="DropFields_node1703061893643",
 )
 
@@ -55,4 +66,3 @@ AmazonS3_node1703062189919 = glueContext.write_dynamic_frame.from_options(
 )
 
 job.commit()
-
