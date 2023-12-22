@@ -4,7 +4,13 @@ from awsglue.utils import getResolvedOptions
 from pyspark.context import SparkContext
 from awsglue.context import GlueContext
 from awsglue.job import Job
+from awsglue import DynamicFrame
 
+def sparkSqlQuery(glueContext, query, mapping, transformation_ctx) -> DynamicFrame:
+    for alias, frame in mapping.items():
+        frame.toDF().createOrReplaceTempView(alias)
+    result = spark.sql(query)
+    return DynamicFrame.fromDF(result, glueContext, transformation_ctx)
 args = getResolvedOptions(sys.argv, ["JOB_NAME"])
 sc = SparkContext()
 glueContext = GlueContext(sc)
@@ -12,57 +18,59 @@ spark = glueContext.spark_session
 job = Job(glueContext)
 job.init(args["JOB_NAME"], args)
 
-# Script generated for node step_trainer_landing
-step_trainer_landing_node1703065168374 = glueContext.create_dynamic_frame.from_catalog(
-    database="stedi",
-    table_name="step_trainer_landing",
-    transformation_ctx="step_trainer_landing_node1703065168374",
+# Script generated for node Step Trainer Landing Zone
+StepTrainerLandingZone = (
+    glueContext.create_dynamic_frame.from_catalog(
+        database="stedi",
+        table_name="step_trainer_landing",
+        transformation_ctx="StepTrainerLandingZone",
+    )
 )
-
-# Script generated for node customer_curated
-customer_curated_node1703065176810 = glueContext.create_dynamic_frame.from_catalog(
+# Script generated for node Customer Curated Zone
+CustomerCuratedZone = glueContext.create_dynamic_frame.from_catalog(
     database="stedi",
     table_name="customer_curated",
-    transformation_ctx="customer_curated_node1703065176810",
+    transformation_ctx="CustomerCuratedZone",
 )
-
-# Script generated for node Join
-Join_node1703065265840 = Join.apply(
-    frame1=step_trainer_landing_node1703065168374,
-    frame2=customer_curated_node1703065176810,
-    keys1=["serialnumber"],
-    keys2=["serialnumber"],
-    transformation_ctx="Join_node1703065265840",
-)
-
-# Script generated for node Drop Fields
-DropFields_node1703065352781 = DropFields.apply(
-    frame=Join_node1703065265840,
-    paths=[
-        "serialNumber",
-        "birthDay",
-        "shareWithPublicAsOfDate",
-        "shareWithResearchAsOfDate",
-        "registrationDate",
-        "customerName",
-        "shareWithFriendsAsOfDate",
-        "email",
-        "phone",
-        "lastUpdateDate",
-    ],
-    transformation_ctx="DropFields_node1703065352781",
-)
-
-# Script generated for node step_landing_trusted
-step_landing_trusted_node1703065445898 = glueContext.write_dynamic_frame.from_options(
-    frame=DropFields_node1703065352781,
-    connection_type="s3",
-    format="json",
-    connection_options={
-        "path": "s3://lake-house-stedi/step_trainer_landing/trusted/",
-        "partitionKeys": [],
+# Script generated for node Step Trainer and Customer Curated Join
+SqlQuery1 = """
+select step_trainer_landing.sensorReadingTime, step_trainer_landing.serialNumber, step_trainer_landing.distanceFromObject
+from step_trainer_landing, customer_curated
+where step_trainer_landing.serialNumber = customer_curated.serialNumber
+"""
+StepTrainerandCustomerCuratedJoin = sparkSqlQuery(
+    glueContext,
+    query=SqlQuery1,
+    mapping={
+        "step_trainer_landing": StepTrainerLandingZone,
+        "customer_curated": CustomerCuratedZone,
     },
-    transformation_ctx="step_landing_trusted_node1703065445898",
+    transformation_ctx="StepTrainerandCustomerCuratedJoin",
 )
 
+# Script generated for node SQL Distinct Query
+SqlQuery0 = """
+select distinct * from myDataSource
+"""
+SQLDistinctQuery = sparkSqlQuery(
+    glueContext,
+    query=SqlQuery0,
+    mapping={"myDataSource": StepTrainerandCustomerCuratedJoin},
+    transformation_ctx="SQLDistinctQuery",
+)
+
+# Script generated for node Step Trainer Trusted Zone
+StepTrainerTrustedZone = glueContext.getSink(
+    path="s3://lake-house-stedi/step_trusted/",
+    connection_type="s3",
+    updateBehavior="UPDATE_IN_DATABASE",
+    partitionKeys=[],
+    enableUpdateCatalog=True,
+    transformation_ctx="StepTrainerTrustedZone",
+)
+StepTrainerTrustedZone.setCatalogInfo(
+    catalogDatabase="stedi", catalogTableName="step_trainer_trusted"
+)
+StepTrainerTrustedZone.setFormat("json")
+StepTrainerTrustedZone.writeFrame(SQLDistinctQuery)
 job.commit()
