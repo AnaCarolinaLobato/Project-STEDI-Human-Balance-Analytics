@@ -4,6 +4,13 @@ from awsglue.utils import getResolvedOptions
 from pyspark.context import SparkContext
 from awsglue.context import GlueContext
 from awsglue.job import Job
+from awsglue import DynamicFrame
+
+def sparkSqlQuery(glueContext, query, mapping, transformation_ctx) -> DynamicFrame:
+    for alias, frame in mapping.items():
+        frame.toDF().createOrReplaceTempView(alias)
+    result = spark.sql(query)
+    return DynamicFrame.fromDF(result, glueContext, transformation_ctx)
 
 args = getResolvedOptions(sys.argv, ["JOB_NAME"])
 sc = SparkContext()
@@ -12,49 +19,74 @@ spark = glueContext.spark_session
 job = Job(glueContext)
 job.init(args["JOB_NAME"], args)
 
-# Script generated for node accelerometer_trusted
-accelerometer_trusted_node1703072338658 = glueContext.create_dynamic_frame.from_catalog(
-    database="stedi",
-    table_name="accelerometer_trusted",
-    transformation_ctx="accelerometer_trusted_node1703072338658",
-)
-
-# Script generated for node step_trainer_trusted
-step_trainer_trusted_node1703072342877 = glueContext.create_dynamic_frame.from_catalog(
+# Script generated for node Step Trusted Landing Zone
+StepTrusted = glueContext.create_dynamic_frame.from_catalog(
     database="stedi",
     table_name="step_trainer_trusted",
-    transformation_ctx="step_trainer_trusted_node1703072342877",
+    transformation_ctx="StepTrusted",
 )
 
-# Script generated for node Join
-Join_node1703072427177 = Join.apply(
-    frame1=step_trainer_trusted_node1703072342877,
-    frame2=accelerometer_trusted_node1703072338658,
-    keys1=["sensorreadingtime"],
-    keys2=["timestamp"],
-    transformation_ctx="Join_node1703072427177",
+# Script generated for node Customer Accelerometer Trusted
+AccelerometerTrusted = glueContext.create_dynamic_frame.from_catalog(
+    database="stedi",
+    table_name="accelerometer_trusted",
+    transformation_ctx="AccelerometerTrusted",
 )
 
-# Script generated for node Drop Fields
-DropFields_node1703072455245 = DropFields.apply(
-    frame=Join_node1703072427177,
-    paths=["user"],
-    transformation_ctx="DropFields_node1703072455245",
+# Script generated for node Step Trusted and Accelerometer Trusted Join
+SqlQuery1 = """
+SELECT
+    step_trainer_trusted.sensorReadingTime,
+    step_trainer_trusted.serialNumber,
+    step_trainer_trusted.distanceFromObject,
+    accelerometer_trusted.timeStamp,
+    accelerometer_trusted.x,
+    accelerometer_trusted.y,
+    accelerometer_trusted.z,
+    accelerometer_trusted.user
+FROM
+    step_trainer_trusted,
+    accelerometer_trusted
+WHERE
+    step_trainer_trusted.sensorReadingTime = accelerometer_trusted.timeStamp
+"""
+
+StepTrustedandAccelerometerTrustedJoin = sparkSqlQuery(
+    glueContext,
+    query=SqlQuery1,
+    mapping={
+        "step_trainer_trusted": StepTrusted,
+        "accelerometer_trusted": AccelerometerTrusted,
+    },
+    transformation_ctx="StepTrustedandAccelerometerTrustedJoin",
 )
 
-# Script generated for node machine_learning_curated
-machine_learning_curated_node1703072480520 = (
-    glueContext.write_dynamic_frame.from_options(
-        frame=DropFields_node1703072455245,
-        connection_type="s3",
-        format="glueparquet",
-        connection_options={
-            "path": "s3://lake-house-stedi/step_trainer_landing/curated/",
-            "partitionKeys": [],
-        },
-        format_options={"compression": "snappy"},
-        transformation_ctx="machine_learning_curated_node1703072480520",
-    )
+# Script generated for node SQL Distinct Query
+SqlQuery0 = """
+SELECT DISTINCT * FROM myDataSource
+"""
+
+SQLDistinctQuery1 = sparkSqlQuery(
+    glueContext,
+    query=SqlQuery0,
+    mapping={"myDataSource": StepTrustedandAccelerometerTrustedJoin},
+    transformation_ctx="SQLDistinctQuery1",
 )
+
+# Script generated for node machine learning curated Zone
+machinelearningcuratedZone = glueContext.getSink(
+    path="s3://lake-house-stedi/machine_learning_curated/",
+    connection_type="s3",
+    updateBehavior="UPDATE_IN_DATABASE",
+    partitionKeys=[],
+    enableUpdateCatalog=True,
+    transformation_ctx="machinelearningcuratedZone",
+)
+
+machinelearningcuratedZone.setCatalogInfo(
+    catalogDatabase="stedi", catalogTableName="machine_learning_curated"
+)
+machinelearningcuratedZone.setFormat("json")
+machinelearningcuratedZone.writeFrame(SQLDistinctQuery1)
 
 job.commit()
